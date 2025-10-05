@@ -99,3 +99,5 @@ def debug_sample():
 if __name__ == "__main__":
     # Run: python app.py  (make sure venv has pandas + openpyxl)
     app.run(host="127.0.0.1", port=5000, debug=True)
+
+# Update: refined comments on 2025-10-05
