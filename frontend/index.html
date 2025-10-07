@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en">
+<head> 
+  <meta charset="utf-8" />
+  <title>Pokémon Explorer (Vanilla)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <style>
+    :root { --overlay: linear-gradient(180deg, rgba(0,0,0,.35) 0%, rgba(0,0,0,.55) 60%, rgba(0,0,0,.75) 100%); }
+    body { padding-bottom: 120px; background: #0b0b0b; color: #111; }
+    .navbar-blur { backdrop-filter: saturate(1.2) blur(6px); background: rgba(255,255,255,0.85); }
+    .sticky-top-shadow { box-shadow: 0 4px 18px rgba(0,0,0,0.12); }
+    .brand-gradient { background: linear-gradient(135deg,#ffcc00,#ff6ad5); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+    /* HERO */
+    .hero { position: relative; height: 72vh; min-height: 440px; border-radius: 16px; overflow: hidden; margin-top: 12px; }
+    .hero video, .hero .img-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .hero video { opacity: 1; transition: opacity 1.2s ease; }
+    .hero .img-bg { opacity: 0; transition: opacity 1.2s ease; background-position: center; background-size: cover; }
+    .hero .overlay { position: absolute; inset: 0; background: var(--overlay); }
+    .hero .content { position: absolute; left: 0; right: 0; bottom: 0; padding: 32px; color: #fff; }
+
+    .fade-in { opacity: 0; transform: translateY(10px); transition: all .6s ease; }
+    .fade-in.show { opacity: 1; transform: translateY(0); }
+
+    #resultsSection.d-none { display: none !important; }
+    .type-chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: rgba(0,0,0,0.06); margin-right: 6px; }
+    .form-chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: rgba(255,0,128,0.12); color: #b10058; margin-left: 8px; }
+    .card img { image-rendering: pixelated; }
+    .dropdown-item { cursor: pointer; }
+
+    .skip-intro { position: absolute; top: 12px; right: 12px; z-index: 2; backdrop-filter: blur(4px); }
+    /* Glitch effect */
+    .img-bg { position: absolute; inset: 0; background-repeat: no-repeat; will-change: opacity; }
+    .img-bg.glitch::before,
+    .img-bg.glitch::after {
+      content: ""; position: absolute; inset: 0;
+      background: inherit; background-size: inherit; background-position: inherit;
+      mix-blend-mode: screen; opacity: .85; pointer-events: none;
+    }
+    .img-bg.glitch::before { filter: drop-shadow(0 0 0 #ff004c); transform: translate(0); animation: glitchShift 2.2s steps(20) infinite; }
+    .img-bg.glitch::after  { filter: drop-shadow(0 0 0 #00eaff); transform: translate(0); animation: glitchShift2 2.8s steps(24) infinite; }
+    .img-bg.glitch { animation: glitchJitter 3.5s steps(28) infinite; }
+    @keyframes glitchShift {
+      0%{clip-path:inset(10% 0 75% 0);transform:translate(0,0)}10%{clip-path:inset(80% 0 5% 0);transform:translate(-2px,2px) skewX(.5deg)}20%{clip-path:inset(40% 0 40% 0);transform:translate(2px,-1px)}30%{clip-path:inset(65% 0 20% 0);transform:translate(-1px,1px)}40%{clip-path:inset(25% 0 55% 0);transform:translate(1px,0)}50%{clip-path:inset(5% 0 85% 0);transform:translate(-2px,0)}60%{clip-path:inset(35% 0 45% 0);transform:translate(1px,1px)}70%{clip-path:inset(70% 0 15% 0);transform:translate(-1px,-1px)}80%{clip-path:inset(15% 0 70% 0);transform:translate(2px,0)}90%{clip-path:inset(55% 0 30% 0);transform:translate(0,-1px)}100%{clip-path:inset(0 0 0 0);transform:translate(0,0)}
+    }
+    @keyframes glitchShift2 {
+      0%{clip-path:inset(60% 0 25% 0);transform:translate(0,0)}12%{clip-path:inset(5% 0 85% 0);transform:translate(2px,-1px) skewX(-.5deg)}24%{clip-path:inset(75% 0 10% 0);transform:translate(-1px,1px)}36%{clip-path:inset(20% 0 65% 0);transform:translate(0,2px)}48%{clip-path:inset(45% 0 40% 0);transform:translate(-2px,0)}60%{clip-path:inset(10% 0 75% 0);transform:translate(1px,0)}72%{clip-path:inset(30% 0 55% 0);transform:translate(0,-1px)}84%{clip-path:inset(85% 0 5% 0);transform:translate(-1px,1px)}100%{clip-path:inset(0 0 0 0);transform:translate(0,0)}
+    }
+    @keyframes glitchJitter {
+      0%{transform:translate(0,0);filter:contrast(1) brightness(1)}20%{transform:translate(.2px,-.2px);filter:contrast(1.02) brightness(1.02)}40%{transform:translate(-.3px,.2px);filter:contrast(1.03) brightness(1.01)}60%{transform:translate(.2px,.1px);filter:contrast(1.01) brightness(1.02)}80%{transform:translate(-.2px,-.2px);filter:contrast(1.03) brightness(1.03)}100%{transform:translate(0,0);filter:contrast(1) brightness(1)}
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .img-bg, .img-bg::before, .img-bg::after { animation: none !important; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAVBAR -->
+  <nav class="navbar navbar-expand-lg sticky-top navbar-blur sticky-top-shadow">
+    <div class="container">
+      <a class="navbar-brand fw-semibold brand-gradient" href="#">Pokémon Explorer</a>
+
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navContent">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+
+      <div class="collapse navbar-collapse" id="navContent">
+        <!-- Search -->
+        <form class="d-flex ms-lg-2 my-2 my-lg-0" role="search" onsubmit="event.preventDefault();">
+          <input id="searchInput" class="form-control" type="search" placeholder="Search Pokémon…" aria-label="Search">
+        </form>
+
+        <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+
+            <li class="nav-item ms-lg-3">
+                <a class="nav-link dropdown-item" href="team.html">Team Builder</a>
+            </li>
+
+
+          <!-- Regions -->
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" id="regionsMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+              Regions: <span id="regionLabel">All</span>
+            </a>
+            <ul class="dropdown-menu" aria-labelledby="regionsMenu" id="regionsList">
+              <li><a class="dropdown-item" data-region="">All</a></li>
+            </ul>
+          </li>
+
+          <!-- Types -->
+          <li class="nav-item dropdown ms-lg-2">
+            <a class="nav-link dropdown-toggle" href="#" id="typesMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+              Types: <span id="typeLabel">All</span>
+            </a>
+            <ul class="dropdown-menu" aria-labelledby="typesMenu" id="typesList">
+              <li><a class="dropdown-item" data-type="">All</a></li>
+            </ul>
+          </li>
+
+          <!-- Show All -->
+          <li class="nav-item ms-lg-3">
+            <a class="btn btn-primary btn-sm" id="showAllBtn">Show All</a>
+          </li>
+
+          <!-- Reset -->
+          <li class="nav-item ms-lg-2">
+            <a class="btn btn-outline-secondary btn-sm" id="resetBtn">Reset</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <!-- HERO (video → image with glitch) -->
+  <div class="container">
+    <section class="hero" id="hero">
+      <button class="btn btn-sm btn-light skip-intro" id="skipIntroBtn">Skip intro</button>
+
+      <video id="introVid" autoplay muted playsinline preload="metadata"></video>
+      <div id="imgBg" class="img-bg"></div>
+
+      <div class="overlay"></div>
+      <div class="content">
+        <h1 class="display-6 fw-bold fade-in" id="heroTitle">Catch 'em by data.</h1>
+        <p class="lead fade-in" id="heroLead">Search by name, explore by region or type, and build your dream team.</p>
+        <div class="mt-2 fade-in" id="heroCta">
+          <button class="btn btn-light btn-lg me-2" id="browseBtn">Browse Pokédex</button>
+          <button class="btn btn-outline-light btn-lg" data-bs-toggle="toast" data-bs-target="#tipToast">Tips</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- RESULTS (hidden until user interacts) -->
+    <section id="resultsSection" class="d-none">
+      <div class="d-flex justify-content-between align-items-center mt-4">
+        <h5 class="mb-0">Results</h5>
+        <small class="text-muted" id="countLabel"></small>
+      </div>
+      <div id="list" class="row row-cols-1 row-cols-md-3 g-3 mt-2"></div>
+    </section>
+  </div>
+
+  <!-- Toast -->
+  <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1080">
+    <div id="tipToast" class="toast align-items-center text-bg-dark border-0" role="alert" aria-live="assertive" aria-atomic="true">
+      <div class="d-flex">
+        <div class="toast-body">
+          Pro tip: pick a <strong>Region</strong> or <strong>Type</strong> from the navbar to reveal Pokémon.
+        </div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCRIPTS -->
+  <script>
+    /* === MEDIA PATHS (edit) === */
+    const video_path = "assets/intro_video.mp4";
+    const image_path = "assets/image_path.jpg";
+
+    /* === APP STATE === */
+    const API_BASE = "http://127.0.0.1:5000";
+    let ALL = [], VIEW = [];
+    const state = { q: "", region: "", type: "" };
+    let dataLoaded = false, menusBuilt = false;
+
+    /* === MEDIA: video → image (glitch) === */
+    function setMediaSources() {
+      const vid = document.getElementById("introVid");
+      const img = document.getElementById("imgBg");
+      vid.src = video_path;
+      img.style.backgroundImage = `url('${image_path}')`;
+    }
+    function crossfadeToImage() {
+      const vid = document.getElementById("introVid");
+      const img = document.getElementById("imgBg");
+      img.style.opacity = 1;
+      vid.style.opacity = 0;
+      img.classList.add("glitch");
+      setTimeout(() => { try { vid.pause(); } catch(e){} }, 300);
+    }
+    function setupVideoHandlers() {
+      const vid = document.getElementById("introVid");
+      const skipBtn = document.getElementById("skipIntroBtn");
+      vid.addEventListener("ended", crossfadeToImage);
+      vid.addEventListener("error", crossfadeToImage);
+      setTimeout(crossfadeToImage, 8000); // forced fallback
+      skipBtn.addEventListener("click", crossfadeToImage);
+    }
+
+    /* === RESULTS: reveal & scroll helper === */
+    function scrollToResults() {
+      const sec = document.getElementById("resultsSection");
+      if (sec.classList.contains("d-none")) sec.classList.remove("d-none");
+      sec.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    /* === DATA & MENUS === */
+    async function ensureData() {
+      if (dataLoaded) return;
+      const res = await fetch(API_BASE + "/api/pokemon");
+      if (!res.ok) throw new Error(res.status + " " + res.statusText);
+      ALL = await res.json();
+      dataLoaded = true;
+      buildMenus();
+    }
+    function buildMenus() {
+      if (menusBuilt) return; menusBuilt = true;
+      const regions = Array.from(new Set(ALL.map(p => p.region))).filter(Boolean).sort();
+      const types = Array.from(new Set(ALL.flatMap(p => p.types || []))).filter(Boolean).sort();
+
+      const regionsList = document.getElementById("regionsList");
+      const typesList = document.getElementById("typesList");
+      regionsList.innerHTML = `<li><a class="dropdown-item" data-region="">All</a></li>`;
+      typesList.innerHTML   = `<li><a class="dropdown-item" data-type="">All</a></li>`;
+
+      regions.forEach(r => regionsList.insertAdjacentHTML("beforeend",
+        `<li><a class="dropdown-item" data-region="${r}">${r}</a></li>`));
+      types.forEach(t => typesList.insertAdjacentHTML("beforeend",
+        `<li><a class="dropdown-item" data-type="${t}">${t}</a></li>`));
+
+      regionsList.querySelectorAll("[data-region]").forEach(a => {
+        a.addEventListener("click", async () => {
+          await ensureData();
+          state.region = a.getAttribute("data-region");
+          document.getElementById("regionLabel").textContent = state.region || "All";
+          applyFilters(true);
+          scrollToResults();  // <-- scroll after selecting region
+        });
+      });
+      typesList.querySelectorAll("[data-type]").forEach(a => {
+        a.addEventListener("click", async () => {
+          await ensureData();
+          state.type = a.getAttribute("data-type");
+          document.getElementById("typeLabel").textContent = state.type || "All";
+          applyFilters(true);
+          scrollToResults();  // <-- scroll after selecting type
+        });
+      });
+    }
+
+    async function onUserIntent() {
+      await ensureData();
+      scrollToResults(); // ensure visible & scroll on any intent
+    }
+
+    function applyFilters(updateCount) {
+      const q = (state.q || "").trim().toLowerCase();
+      VIEW = ALL.filter(p => {
+        const matchesQ = !q || p.name.toLowerCase().includes(q);
+        const matchesRegion = !state.region || p.region === state.region;
+        const matchesType = !state.type || (Array.isArray(p.types) && p.types.includes(state.type));
+        return matchesQ && matchesRegion && matchesType;
+      });
+      renderList(VIEW, updateCount);
+    }
+
+    function prettifyForm(slug, baseName) {
+      if (!slug) return "";
+      const s = String(slug).toLowerCase();
+      if (s.includes("mega-x")) return "Mega X";
+      if (s.includes("mega-y")) return "Mega Y";
+      if (s.includes("mega"))   return "Mega";
+      if (s.includes("alola"))  return "Alolan";
+      if (s.includes("galar"))  return "Galarian";
+      if (s.includes("hisui"))  return "Hisuian";
+      if (s.includes("paldea")) return "Paldean";
+      const tail = s.replace(baseName.toLowerCase(), "").replace(/^-+/, "").replace(/-/g, " ");
+      return tail ? tail.replace(/\b\w/g, c => c.toUpperCase()) : "";
+    }
+
+    function cardHTML(p) {
+      const types = (p.types || []).join(", ");
+      const abilities = (p.abilities || []).join(", ");
+      const sprite = p.sprite || `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${p.id}.png`;
+      const chips = (p.types || []).map(t => `<span class="type-chip">${t}</span>`).join("");
+      const form = prettifyForm(p.slug, p.name);
+      const formChip = form ? `<span class="form-chip">(${form})</span>` : "";
+      return `
+        <div class="col">
+          <div class="card h-100 shadow-sm">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-baseline">
+                <h5 class="card-title mb-0">${p.name} ${formChip}</h5>
+                <span class="badge text-bg-secondary">#${p.id}</span>
+              </div>
+              <img src="${sprite}" alt="${p.name}" width="96" height="96" class="mt-2" />
+              <div class="mt-2">${chips}</div>
+              <p class="mt-2 mb-1"><strong>Region:</strong> ${p.region}</p>
+              <p class="mb-1"><strong>Types:</strong> ${types}</p>
+              <p class="mb-0"><strong>Abilities:</strong> ${abilities}</p>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderList(items, updateCount) {
+      document.getElementById("list").innerHTML = items.map(cardHTML).join("");
+      if (updateCount) document.getElementById("countLabel").textContent = `${items.length} Pokémon`;
+    }
+
+    /* === INIT === */
+    document.addEventListener("DOMContentLoaded", async () => {
+      // media
+      document.getElementById("imgBg").style.backgroundImage = `url('${image_path}')`;
+      document.getElementById("introVid").src = video_path;
+      setupVideoHandlers();
+
+      // preload data so menus populate
+      try { await ensureData(); } catch (e) { console.error(e); }
+
+      // also ensure data when dropdown opens
+      document.getElementById("regionsMenu").addEventListener("show.bs.dropdown", ensureData);
+      document.getElementById("typesMenu").addEventListener("show.bs.dropdown", ensureData);
+
+      // hero fades
+      setTimeout(() => document.getElementById("heroTitle").classList.add("show"), 150);
+      setTimeout(() => document.getElementById("heroLead").classList.add("show"), 350);
+      setTimeout(() => document.getElementById("heroCta").classList.add("show"), 550);
+
+      // toast
+      const toastEl = document.getElementById("tipToast");
+      const toast = new bootstrap.Toast(toastEl, { delay: 3200 }); toast.show();
+
+      // Browse Pokédex button
+      document.getElementById("browseBtn").addEventListener("click", async () => {
+        await onUserIntent();
+        state.q = ""; state.region = ""; state.type = "";
+        applyFilters(true);
+      });
+
+      // Search typing → ensure data, filter, scroll
+      let t = null;
+      document.getElementById("searchInput").addEventListener("input", async (e) => {
+        await ensureData();
+        clearTimeout(t);
+        t = setTimeout(() => {
+          state.q = e.target.value || "";
+          applyFilters(true);
+          scrollToResults(); // <-- scroll on typing
+        }, 160);
+      });
+
+      // Show All → reset, filter, scroll
+      document.getElementById("showAllBtn").addEventListener("click", async () => {
+        await ensureData();
+        state.q = ""; state.region = ""; state.type = "";
+        document.getElementById("searchInput").value = "";
+        document.getElementById("regionLabel").textContent = "All";
+        document.getElementById("typeLabel").textContent = "All";
+        applyFilters(true);
+        scrollToResults(); // <-- scroll on show all
+      });
+
+      // Reset → hide results, scroll back to hero
+      document.getElementById("resetBtn").addEventListener("click", () => {
+        state.q = ""; state.region = ""; state.type = "";
+        document.getElementById("searchInput").value = "";
+        document.getElementById("regionLabel").textContent = "All";
+        document.getElementById("typeLabel").textContent = "All";
+        document.getElementById("resultsSection").classList.add("d-none");
+        document.getElementById("hero").scrollIntoView({ behavior: "smooth" });
+      });
+
+      // navbar shadow on scroll
+      const nav = document.querySelector("nav.navbar");
+      window.addEventListener("scroll", () => {
+        const y = window.scrollY;
+        nav.style.boxShadow = y > 10 ? "0 8px 24px rgba(0,0,0,0.15)" : "0 4px 18px rgba(0,0,0,0.12)";
+      });
+    });
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

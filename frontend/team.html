@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Team Builder — Pokémon Explorer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <style>
+    body { background:#0b0b0b; color:#111; }
+    .navbar-blur { backdrop-filter: saturate(1.2) blur(6px); background: rgba(255,255,255,0.85); box-shadow: 0 4px 18px rgba(0,0,0,0.12); }
+    .brand-gradient { background: linear-gradient(135deg,#ffcc00,#ff6ad5); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .page-title { color:#fff; }
+    .card { border-radius: 14px; }
+    .slot { min-height: 140px; display:flex; align-items:center; justify-content:center; border:1px dashed #ddd; border-radius:12px; background:#fff; }
+    .slot.filled { border-style: solid; }
+    .slot img { image-rendering: pixelated; }
+    .type-chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: rgba(0,0,0,0.06); margin-right: 6px; }
+    .form-chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: rgba(255,0,128,0.12); color: #b10058; margin-left: 8px; }
+    .toolbar .btn { margin-right: .4rem; }
+  </style>
+</head>
+<body>
+  <!-- NAVBAR -->
+  <nav class="navbar navbar-expand-lg sticky-top navbar-blur">
+    <div class="container">
+      <a class="navbar-brand fw-semibold brand-gradient" href="index.html">Pokémon Explorer</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navContent">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navContent">
+        <ul class="navbar-nav ms-auto">
+          <li class="nav-item"><a class="nav-link" href="index.html">← Home</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <!-- CONTENT -->
+  <div class="container py-4">
+    <div class="d-flex align-items-end justify-content-between flex-wrap">
+      <div>
+        <h2 class="page-title mb-1">Team Builder</h2>
+        <p class="text-muted mb-3">Pick up to 6 Pokémon. Your team is saved locally.</p>
+      </div>
+      <div class="toolbar">
+        <button id="clearBtn" class="btn btn-outline-danger btn-sm">Clear Team</button>
+        <button id="exportBtn" class="btn btn-outline-primary btn-sm">Export JSON</button>
+      </div>
+    </div>
+
+    <!-- Add controls -->
+    <div class="card mb-3">
+      <div class="card-body">
+        <div class="row g-2 align-items-center">
+          <div class="col-md-6">
+            <label class="form-label mb-1">Search Pokémon</label>
+            <input id="searchInput" class="form-control" list="pokeList" placeholder="e.g., Charizard, Raichu (Alolan)…">
+            <datalist id="pokeList"></datalist>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label mb-1">Slot</label>
+            <select id="slotSelect" class="form-select">
+              <option value="auto">Auto (next empty)</option>
+              <option value="0">Slot 1</option>
+              <option value="1">Slot 2</option>
+              <option value="2">Slot 3</option>
+              <option value="3">Slot 4</option>
+              <option value="4">Slot 5</option>
+              <option value="5">Slot 6</option>
+            </select>
+          </div>
+          <div class="col-md-3 d-grid">
+            <label class="form-label invisible">.</label>
+            <button id="addBtn" class="btn btn-primary">Add to Team</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Team grid -->
+    <div class="row g-3" id="teamGrid">
+      <!-- six slots -->
+    </div>
+
+    <!-- Small help -->
+    <div class="mt-3">
+      <small class="text-secondary">
+        Tip: Names include forms where available (e.g., “Charizard (Mega X)”, “Raichu (Alolan)”).  
+        Data loads from your backend at <code>/api/pokemon</code>.
+      </small>
+    </div>
+  </div>
+
+  <!-- TEMPLATES (rendered by JS) -->
+
+  <script>
+    const API_BASE = "http://127.0.0.1:5000";
+    const STORAGE_KEY = "pokemon_team_v1";
+    const MAX_SLOTS = 6;
+
+    let ALL = [];   // full list from backend
+    let TEAM = new Array(MAX_SLOTS).fill(null); // array of {id, slug} or null
+
+    // -------- Helpers --------
+    function prettifyForm(slug, baseName) {
+      if (!slug) return "";
+      const s = String(slug).toLowerCase();
+      if (s.includes("mega-x")) return "Mega X";
+      if (s.includes("mega-y")) return "Mega Y";
+      if (s.includes("mega"))   return "Mega";
+      if (s.includes("alola"))  return "Alolan";
+      if (s.includes("galar"))  return "Galarian";
+      if (s.includes("hisui"))  return "Hisuian";
+      if (s.includes("paldea")) return "Paldean";
+      const tail = s.replace(baseName.toLowerCase(), "").replace(/^-+/, "").replace(/-/g, " ");
+      return tail ? tail.replace(/\b\w/g, c => c.toUpperCase()) : "";
+    }
+
+    function findByName(nameInput) {
+      const n = (nameInput || "").trim().toLowerCase();
+      if (!n) return null;
+      // Try exact match on name or name (form chip suffix in datalist)
+      const exact = ALL.find(p => p.name.toLowerCase() === n);
+      if (exact) return exact;
+      // Also search synthetic display "Name (Form)" used in datalist option text
+      // We store data attributes on the option for robust lookup, so better use that (below).
+      return null;
+    }
+
+    function displayName(p) {
+      const form = prettifyForm(p.slug, p.name);
+      return form ? `${p.name} (${form})` : p.name;
+    }
+
+    function spriteOf(p) {
+      return p.sprite || `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${p.id}.png`;
+    }
+
+    function saveTeam() {
+      return new Promise((resolve) => {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(TEAM));
+        resolve(true);
+      });
+    }
+
+    async function loadTeam() {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      try {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) {
+          TEAM = [...new Array(MAX_SLOTS).fill(null)];
+          arr.slice(0, MAX_SLOTS).forEach((v, i) => TEAM[i] = v);
+        }
+      } catch {}
+    }
+
+    function firstEmptySlot() {
+      return TEAM.findIndex(s => !s);
+    }
+
+    function removeAt(i) {
+      TEAM[i] = null;
+      renderTeam();
+      saveTeam();
+    }
+
+    function setSlot(i, p) {
+      TEAM[i] = { id: p.id, slug: p.slug || "" };
+      renderTeam();
+      saveTeam();
+    }
+
+    // -------- Rendering --------
+    function slotHTML(i, pFull) {
+      if (!pFull) {
+        return `
+          <div class="col-12 col-md-6 col-lg-4">
+            <div class="slot text-muted">
+              <div class="text-center py-4">
+                <div class="mb-2">Empty Slot ${i+1}</div>
+                <small>Use “Search Pokémon” above to add.</small>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+      const types = (pFull.types || []).map(t => `<span class="type-chip">${t}</span>`).join("");
+      const form = prettifyForm(pFull.slug, pFull.name);
+      const formChip = form ? `<span class="form-chip">(${form})</span>` : "";
+      const spr = spriteOf(pFull);
+
+      return `
+        <div class="col-12 col-md-6 col-lg-4">
+          <div class="slot filled bg-white p-2">
+            <div class="d-flex align-items-center w-100">
+              <img src="${spr}" width="72" height="72" alt="${pFull.name}" class="me-3">
+              <div class="flex-grow-1">
+                <div class="d-flex align-items-center justify-content-between">
+                  <div>
+                    <strong>${pFull.name}</strong> ${formChip}
+                    <div class="mt-1">${types}</div>
+                  </div>
+                  <button class="btn btn-sm btn-outline-danger ms-2" data-remove="${i}">Remove</button>
+                </div>
+                <div class="text-muted small mt-1">#${pFull.id} · ${pFull.region}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderTeam() {
+      const grid = document.getElementById("teamGrid");
+      const items = TEAM.map((t) => {
+        if (!t) return slotHTML(TEAM.indexOf(t), null); // will get recalculated below
+        const p = ALL.find(p =>
+          p.id === t.id && (String(p.slug||"") === String(t.slug||""))
+        ) || ALL.find(p => p.id === t.id); // fallback by id
+        return p ? slotHTML(TEAM.indexOf(t), p) : slotHTML(TEAM.indexOf(t), null);
+      });
+
+      // Fix index use: build via loop instead to ensure correct indices
+      const html = [];
+      for (let i=0;i<MAX_SLOTS;i++){
+        const t = TEAM[i];
+        let p = null;
+        if (t) {
+          p = ALL.find(p => p.id === t.id && (String(p.slug||"") === String(t.slug||""))) || ALL.find(p => p.id === t.id);
+        }
+        html.push(slotHTML(i, p || null));
+      }
+      grid.innerHTML = html.join("");
+
+      // wire removes
+      grid.querySelectorAll("[data-remove]").forEach(btn => {
+        btn.addEventListener("click", () => removeAt(parseInt(btn.getAttribute("data-remove"),10)));
+      });
+    }
+
+    function fillDatalist() {
+      const dl = document.getElementById("pokeList");
+      dl.innerHTML = "";
+      ALL.forEach(p => {
+        const opt = document.createElement("option");
+        opt.value = displayName(p);
+        // store lookup keys
+        opt.dataset.id = p.id;
+        opt.dataset.slug = p.slug || "";
+        dl.appendChild(opt);
+      });
+    }
+
+    function resolveFromInput() {
+      const input = document.getElementById("searchInput");
+      const val = input.value.trim();
+      if (!val) return null;
+
+      // try match against datalist options (most reliable)
+      const opts = Array.from(document.getElementById("pokeList").options);
+      const match = opts.find(o => o.value.toLowerCase() === val.toLowerCase());
+      if (match) {
+        const id = parseInt(match.dataset.id,10);
+        const slug = match.dataset.slug || "";
+        return ALL.find(p => p.id === id && String(p.slug||"") === slug) || ALL.find(p => p.id === id);
+      }
+
+      // otherwise, naive name contains
+      const byName = ALL.find(p => displayName(p).toLowerCase() === val.toLowerCase()) ||
+                     ALL.find(p => p.name.toLowerCase() === val.toLowerCase());
+      return byName || null;
+    }
+
+    // -------- Events --------
+    document.addEventListener("DOMContentLoaded", async () => {
+      // load data and existing team
+      const res = await fetch(API_BASE + "/api/pokemon");
+      if (!res.ok) {
+        alert("Failed to load Pokémon list from backend.");
+        return;
+      }
+      ALL = await res.json();
+      await loadTeam();
+      fillDatalist();
+      renderTeam();
+
+      // Add button
+      document.getElementById("addBtn").addEventListener("click", async () => {
+        const p = resolveFromInput();
+        if (!p) { alert("Pick a Pokémon from the list first."); return; }
+
+        let idx = document.getElementById("slotSelect").value;
+        if (idx === "auto") {
+          const i = firstEmptySlot();
+          if (i === -1) { alert("All 6 slots are filled."); return; }
+          idx = i;
+        } else {
+          idx = parseInt(idx, 10);
+        }
+        setSlot(idx, p);
+        document.getElementById("searchInput").value = "";
+      });
+
+      // Clear team
+      document.getElementById("clearBtn").addEventListener("click", async () => {
+        if (!confirm("Clear all 6 slots?")) return;
+        TEAM = new Array(MAX_SLOTS).fill(null);
+        renderTeam();
+        await saveTeam();
+      });
+
+      // Export JSON (downloads team.json)
+      document.getElementById("exportBtn").addEventListener("click", () => {
+        const payload = TEAM.filter(Boolean);
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = "team.json"; a.click();
+        URL.revokeObjectURL(url);
+      });
+    });
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
