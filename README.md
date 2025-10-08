@@ -90,7 +90,7 @@ Running-
   ### 🎥 Demo Video
 
 <video width="600" controls>
-  <source src="https://github.com/CodeBreaker0404/Pokemon-Website/blob/main/frontend/assets/fullstack.mp4?raw=true" type="video/mp4">
+  <source src="https://github.com/CodeBreaker0404/Pokemon-Website/frontend/assets/fullstack.mp4?raw=true" type="video/mp4">
   Your browser does not support the video tag.
 </video>
 
